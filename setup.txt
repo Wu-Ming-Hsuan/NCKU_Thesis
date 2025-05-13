@@ -40,3 +40,9 @@ pip install chamferdist
 
 pip install -e .
 pip install -e projects/BEVFusion/
+projects/BEVFusion/setup.py module -project.bevfusion
+
+
+python tools/create_data.py nuscenes --root-path ./data/nuscenes --out-dir ./data/nuscenes --extra-tag nuscenes
+python tools/create_data.py nuscenes --root-path ./data/nuscenes --version v1.0-mini --out-dir ./data/nuscenes --extra-tag nuscenes 
+https://blog.csdn.net/CSL275200/article/details/132029212

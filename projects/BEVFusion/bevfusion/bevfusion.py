@@ -33,6 +33,7 @@ class BEVFusion(Base3DDetector):
         bbox_head: Optional[dict] = None,
         init_cfg: OptMultiConfig = None,
         seg_head: Optional[dict] = None,
+        nlm_layer: Optional[dict] = None,
         **kwargs,
     ) -> None:
         voxelize_cfg = data_preprocessor.pop('voxelize_cfg')
@@ -59,6 +60,9 @@ class BEVFusion(Base3DDetector):
         self.pts_neck = MODELS.build(pts_neck)
 
         self.bbox_head = MODELS.build(bbox_head)
+        
+        # Add NLM denoising layer if specified
+        self.nlm_layer = MODELS.build(nlm_layer) if nlm_layer is not None else None
 
         self.init_weights()
 
@@ -277,6 +281,10 @@ class BEVFusion(Base3DDetector):
         else:
             assert len(features) == 1, features
             x = features[0]
+        
+        print(x.shape)
+        if self.nlm_layer is not None:
+            x = self.nlm_layer(x)
 
         x = self.pts_backbone(x)
         x = self.pts_neck(x)
