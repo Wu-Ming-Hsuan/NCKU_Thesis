@@ -34,6 +34,7 @@ class BEVFusion(Base3DDetector):
         init_cfg: OptMultiConfig = None,
         seg_head: Optional[dict] = None,
         nlm_layer: Optional[dict] = None,
+        freeze_except=None, 
         **kwargs,
     ) -> None:
         voxelize_cfg = data_preprocessor.pop('voxelize_cfg')
@@ -63,9 +64,20 @@ class BEVFusion(Base3DDetector):
         
         # Add NLM denoising layer if specified
         self.nlm_layer = MODELS.build(nlm_layer) if nlm_layer is not None else None
-
+        self.freeze_except = freeze_except or []
+        self._freeze_modules()
         self.init_weights()
+    
+    def _freeze_modules(self):
+        for name, param in self.named_parameters():
+            if not any(name.startswith(k) for k in self.freeze_except):
+                param.requires_grad = False
 
+        # 凍結 BatchNorm running stats，避免小 batch 造成統計漂移
+        for m in self.modules():
+            if isinstance(m, (torch.nn.BatchNorm2d, torch.nn.SyncBatchNorm)):
+                m.eval()
+    
     def _forward(self,
                  batch_inputs: Tensor,
                  batch_data_samples: OptSampleList = None):
@@ -282,7 +294,6 @@ class BEVFusion(Base3DDetector):
             assert len(features) == 1, features
             x = features[0]
         
-        print(x.shape)
         if self.nlm_layer is not None:
             x = self.nlm_layer(x)
 

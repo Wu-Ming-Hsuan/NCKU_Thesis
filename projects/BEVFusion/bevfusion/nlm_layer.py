@@ -35,21 +35,19 @@ class NonLocalDenoising(nn.Module):
         # Final projection layer
         self.projection = None
         
-    def _init_layers(self, n_in):
+    def _init_layers(self, n_in, device):
         """Initialize layers with the correct dimensions."""
         self.in_channels = n_in
         
         if self.embed:
-            embed_dim = max(n_in // 2, 1)  # Ensure at least 1 channel
-            self.theta_conv = nn.Conv2d(n_in, embed_dim, kernel_size=1, stride=1, padding=0, bias=False)
-            self.phi_conv = nn.Conv2d(n_in, embed_dim, kernel_size=1, stride=1, padding=0, bias=False)
-            
-            # Initialize weights with small stddev
+            embed_dim = max(n_in // 2, 1)
+            self.theta_conv = nn.Conv2d(n_in, embed_dim, 1, 1, 0, bias=False).to(device)
+            self.phi_conv = nn.Conv2d(n_in, embed_dim, 1, 1, 0, bias=False).to(device)
             nn.init.normal_(self.theta_conv.weight, std=0.01)
             nn.init.normal_(self.phi_conv.weight, std=0.01)
         
         # Final projection layer to match input channels
-        self.projection = nn.Conv2d(n_in, n_in, kernel_size=1, stride=1, padding=0, bias=False)
+        self.projection = nn.Conv2d(n_in, n_in, 1, 1, 0, bias=False).to(device)
         
         # Initialize gamma to 0 if using zero_init
         if self.zero_init:
@@ -131,8 +129,8 @@ class NonLocalDenoising(nn.Module):
             torch.Tensor: Denoised feature maps with same shape as input.
         """
         # Initialize layers if not done yet or if channels changed
-        if self.in_channels is None or (self.projection is None):
-            self._init_layers(x.shape[1])
+        if self.in_channels != x.shape[1] or self.projection is None:
+            self._init_layers(x.shape[1], x.device)
         
         # Apply non-local operation
         residual = self.non_local_op(x)
