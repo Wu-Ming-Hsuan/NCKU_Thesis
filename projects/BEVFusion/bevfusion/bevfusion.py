@@ -64,9 +64,9 @@ class BEVFusion(Base3DDetector):
         
         # Add NLM denoising layer if specified
         self.nlm_layer = MODELS.build(nlm_layer) if nlm_layer is not None else None
+        self.init_weights()
         self.freeze_except = freeze_except or []
         self._freeze_modules()
-        self.init_weights()
     
     def _freeze_modules(self):
         for name, param in self.named_parameters():
@@ -77,6 +77,8 @@ class BEVFusion(Base3DDetector):
         for m in self.modules():
             if isinstance(m, (torch.nn.BatchNorm2d, torch.nn.SyncBatchNorm)):
                 m.eval()
+                if not any(n.startswith(k) for k in self.freeze_except for n, _ in m.named_parameters(recurse=False)):
+                    m.requires_grad_(False)
     
     def _forward(self,
                  batch_inputs: Tensor,
@@ -131,7 +133,8 @@ class BEVFusion(Base3DDetector):
     def init_weights(self) -> None:
         if self.img_backbone is not None:
             self.img_backbone.init_weights()
-
+        if self.nlm_layer is not None and hasattr(self.nlm_layer, 'init_weights'):
+            self.nlm_layer.init_weights()
     @property
     def with_bbox_head(self):
         """bool: Whether the detector has a box head."""

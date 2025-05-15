@@ -9,6 +9,7 @@ load_from = "/raid/matthew/NCKU_Thesis/checkpoints/BEVFusion_cam_lidar.pth"
 model = dict(
     nlm_layer=dict(
         type='NonLocalDenoising',
+        in_channels=256,
         embed=True,
         softmax=True,
         zero_init=True
