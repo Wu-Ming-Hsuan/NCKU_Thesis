@@ -6,7 +6,7 @@ CUDA_VISIBLE_DEVICES=3 python tools/test.py projects/BEVFusion/configs/bevfusion
 
 Training commands
 tmux attach -t 0
-python tools/train.py projects/BEVFusion/configs/bevfusion_lidar-cam.py --cfg-options load_from="/ssddd/matthew/NCKU_Thesis/checkpoints/BEVFusion_cam_lidar.pth" 
+python tools/train.py projects/BEVFusion/configs/bevfusion_lidar-cam_nlm.py --cfg-options load_from="/ssddd/matthew/NCKU_Thesis/checkpoints/BEVFusion_cam_lidar.pth" 
 CUDA_VISIBLE_DEVICES=3 python tools/train.py projects/BEVFusion/configs/bevfusion_lidar-cam_nlm.py --cfg-options load_from="/ssddd/matthew/NCKU_Thesis/checkpoints/BEVFusion_cam_lidar.pth" 
 bash tools/dist_train.sh projects/BEVFusion/configs/bevfusion_lidar-cam_nlm.py 2
 python tools/train.py /ssddd/matthew/NCKU_Thesis/projects/BEVFusion/configs/bevfusion_lidar-cam_voxel0075_second_secfpn_8xb4-cyclic-20e_nus-3d.py

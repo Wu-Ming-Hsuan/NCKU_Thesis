@@ -3,12 +3,12 @@ _base_ = [
 ]
 
 # Load pretrained checkpoint
-load_from = "/raid/matthew/NCKU_Thesis/checkpoints/BEVFusion_cam_lidar.pth"
+load_from = "checkpoints/BEVFusion_cam_lidar.pth"
 
 # Add NLM layer configuration
 model = dict(
     nlm_layer=dict(
-        type='NonLocalDenoising',
+        type='WindowNonLocalDenoising',
         in_channels=256,
         embed=True,
         softmax=True,
