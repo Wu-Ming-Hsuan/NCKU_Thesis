@@ -9,7 +9,13 @@ tmux attach -t 0
 python tools/train.py projects/BEVFusion/configs/bevfusion_lidar-cam.py --cfg-options load_from="/ssddd/matthew/NCKU_Thesis/checkpoints/BEVFusion_cam_lidar.pth" 
 CUDA_VISIBLE_DEVICES=3 python tools/train.py projects/BEVFusion/configs/bevfusion_lidar-cam_nlm.py --cfg-options load_from="/ssddd/matthew/NCKU_Thesis/checkpoints/BEVFusion_cam_lidar.pth" 
 bash tools/dist_train.sh projects/BEVFusion/configs/bevfusion_lidar-cam_nlm.py 2
+python tools/train.py /ssddd/matthew/NCKU_Thesis/projects/BEVFusion/configs/bevfusion_lidar-cam_voxel0075_second_secfpn_8xb4-cyclic-20e_nus-3d.py
 
 Image PGD Attack
-python tools/test.py projects/BEVFusion/configs/bevfusion_lidar-cam_pgd.py checkpoints/BEVFusion_cam_lidar.pth
+CUDA_VISIBLE_DEVICES=1 python tools/test.py projects/BEVFusion/configs/bevfusion_lidar-cam_attack.py checkpoints/BEVFusion_cam_lidar_nlm.pth
 bash tools/dist_test.sh projects/BEVFusion/configs/bevfusion_lidar-cam_pgd.py checkpoints/BEVFusion_cam_lidar.pth 2
+CUDA_VISIBLE_DEVICES=1 python tools/test.py projects/BEVFusion/configs/bevfusion_lidar-cam_hook.py checkpoints/BEVFusion_cam_lidar.pth
+
+python tools/test.py projects/BEVFusion/configs/bevfusion_lidar-cam_attack.py checkpoints/BEVFusion_cam_lidar.pth
+
+python tools/test.py projects/BEVFusion/configs/bevfusion_lidar-cam_attack_defense.py checkpoints/BEVFusion_cam_lidar_nlm.pth
