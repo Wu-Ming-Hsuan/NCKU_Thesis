@@ -68,7 +68,7 @@ class BEVFusion(Base3DDetector):
         self.nlm_layer = MODELS.build(nlm_layer) if nlm_layer is not None else None
         self.init_weights()
         self.freeze_except = freeze_except or []
-        self._freeze_modules()
+        # self._freeze_modules()
     
     def _freeze_modules(self):
         for name, param in self.named_parameters():

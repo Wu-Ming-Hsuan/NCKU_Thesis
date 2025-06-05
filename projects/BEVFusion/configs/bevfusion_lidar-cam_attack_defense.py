@@ -56,13 +56,12 @@ model = dict(
     fusion_layer=dict(
         type='ConvFuser', in_channels=[80, 256], out_channels=256), 
     nlm_layer=dict(
-        type='NonLocalDenoising',
+        type='WindowNonLocalDenoising',
         in_channels=256,
         embed=True,
         softmax=True,
         zero_init=True
-    ),
-    freeze_except=['nlm_layer'])
+    ))
 
 train_pipeline = [
     dict(
