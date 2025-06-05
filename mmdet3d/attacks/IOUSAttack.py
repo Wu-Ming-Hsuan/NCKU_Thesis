@@ -36,7 +36,8 @@ class IOUSAttack:
         device = next(model.parameters()).device
         points_ori = data['inputs']['points'][0].to(device).detach()
         ori_xyz = points_ori[:, :3]
-        gt_boxes_3d_ori = data['data_samples'][0].eval_ann_info['gt_bboxes_3d'].to(device)
+        # print(data['data_samples'][0].gt_instances_3d.keys()) # ['labels_3d', 'bboxes_3d']
+        gt_boxes_3d_ori = data['data_samples'][0].gt_instances_3d.bboxes_3d.to(device)
 
         attack_name = self.attack_name
         steps = self.steps

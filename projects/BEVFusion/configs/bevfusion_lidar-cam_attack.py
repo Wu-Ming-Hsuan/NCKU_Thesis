@@ -243,7 +243,7 @@ custom_hooks = [
     dict(
         type='AttackHook',
         attack_cfg=dict(
-            type='IOUSAttack',
+            type='IOUSAttack'
         )
     )
 ]
