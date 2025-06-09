@@ -36,6 +36,7 @@ class IOUSAttack:
         device = next(model.parameters()).device
         points_ori = data['inputs']['points'][0].to(device).detach()
         ori_xyz = points_ori[:, :3]
+        # print(data['data_samples'][0].gt_instances_3d.keys()) # ['labels_3d', 'bboxes_3d']
         gt_boxes_3d_ori = data['data_samples'][0].gt_instances_3d.bboxes_3d.to(device)
 
         attack_name = self.attack_name
@@ -51,14 +52,13 @@ class IOUSAttack:
         best_attack_points = points_ori.clone()
 
         if attack_name == 'iou_per':
-            delta = torch.empty_like(points_ori).uniform_(-self.epsilon, self.epsilon).to(device)
-            delta.requires_grad = True
-            optimizer = optim.Adam([delta], lr=attack_lr)
+            adv_point = (points_ori + torch.empty_like(points_ori).uniform_(-self.epsilon, self.epsilon)).clone().detach()
+            adv_point = self.enforce_fixed_dims(adv_point, points_ori).clone().detach()
+            adv_point.requires_grad_(True)
+            optimizer = optim.Adam([adv_point], lr=attack_lr)
 
             for step in range(steps):
-                cur_adv = self.enforce_fixed_dims(points_ori + delta, points_ori)
-                cur_adv = cur_adv.detach()  # 必要，保證不是 leaf variable
-
+                cur_adv = adv_point.clone().detach().requires_grad_(True)
                 new_inputs = {'img': data['inputs']['img'], 'points': [cur_adv]}
                 new_data = dict(inputs=new_inputs, data_samples=data['data_samples'])
                 pro_data = model.data_preprocessor(new_data, False)
@@ -90,7 +90,7 @@ class IOUSAttack:
                     raise ValueError("Invalid sub_loss type")
                 adv_loss = loss_tensor.sum(dim=1).mean()
 
-                adv_xyz = (points_ori + delta)[:, :3]
+                adv_xyz = cur_adv[:, :3]
                 dist1 = dist_func(adv_xyz.unsqueeze(0), ori_xyz.unsqueeze(0))
                 dist2 = dist_func(ori_xyz.unsqueeze(0), adv_xyz.unsqueeze(0))
                 euclidean_loss = torch.sqrt(torch.sum((adv_xyz - ori_xyz) ** 2) + 1e-4)
@@ -101,28 +101,24 @@ class IOUSAttack:
                 loss_all.backward()
                 optimizer.step()
                 optimizer.zero_grad(set_to_none=True)
+                adv_point = cur_adv.detach()
 
-                # 投影回epsilon ball
-                delta.data = torch.clamp(delta.data, -self.epsilon, self.epsilon)
-
-                # 記錄
                 current_dist = torch.sqrt(torch.mean((adv_xyz - ori_xyz) ** 2)).item()
                 current_loss = loss_all.item()
                 if current_dist < best_attack_dist and current_loss < best_attack_score:
                     best_attack_dist = current_dist
                     best_attack_score = current_loss
-                    best_attack_points = (points_ori + delta).detach()
+                    best_attack_points = adv_point.clone().detach()
 
-            data['inputs']['points'][0] = best_attack_points.cpu()
+            data['inputs']['points'][0] = best_attack_points.detach().cpu()
             return data
 
         elif attack_name == 'iou_drop':
+            num_rounds = int(np.ceil(float(num_drop) / float(k_drop_round)))
             adv_point = points_ori.clone()
-            for round_idx in range(int(np.ceil(float(num_drop) / float(k_drop_round)))):
-                delta = torch.zeros_like(adv_point, requires_grad=True, device=device)
-                cur_adv = self.enforce_fixed_dims(adv_point + delta, adv_point)
-                cur_adv = cur_adv.detach()
-                new_inputs = {'img': data['inputs']['img'], 'points': [cur_adv]}
+            for round_idx in range(num_rounds):
+                input_pc = adv_point.clone().detach().requires_grad_(True)
+                new_inputs = {'img': data['inputs']['img'], 'points': [input_pc]}
                 new_data = dict(inputs=new_inputs, data_samples=data['data_samples'])
                 pro_data = model.data_preprocessor(new_data, False)
                 inputs = pro_data['inputs']
@@ -148,24 +144,22 @@ class IOUSAttack:
                 else:
                     raise ValueError("Invalid sub_loss type")
                 loss_all = loss_tensor.sum()
+
                 loss_all.backward()
 
-                grad = delta.grad
+                grad = input_pc.grad
                 grad_norm = torch.sum(grad ** 2, dim=1)
-                K = adv_point.shape[0]
+                K = input_pc.shape[0]
                 k_round = min(k_drop_round, num_drop - round_idx * k_drop_round)
                 _, idx_keep = torch.topk(-grad_norm, k=K - k_round, dim=-1)
-                adv_point = adv_point[idx_keep].detach()  # 剩下的點雲
+                adv_point = input_pc[idx_keep].detach()  # 剩下的點雲
 
-            data['inputs']['points'][0] = adv_point.cpu()
+            data['inputs']['points'][0] = adv_point.detach().cpu()
             return data
 
         elif attack_name == 'iou_add':
-            input_pc = points_ori.clone()
-            delta = torch.zeros_like(input_pc, requires_grad=True, device=device)
-            cur_adv = self.enforce_fixed_dims(input_pc + delta, input_pc)
-            cur_adv = cur_adv.detach()
-            new_inputs = {'img': data['inputs']['img'], 'points': [cur_adv]}
+            input_pc = points_ori.clone().detach().requires_grad_(True)
+            new_inputs = {'img': data['inputs']['img'], 'points': [input_pc]}
             new_data = dict(inputs=new_inputs, data_samples=data['data_samples'])
             pro_data = model.data_preprocessor(new_data, False)
             inputs = pro_data['inputs']
@@ -190,22 +184,19 @@ class IOUSAttack:
             loss_all = loss_tensor.sum()
             loss_all.backward()
 
-            grad = delta.grad
+            grad = input_pc.grad
             grad_norm = torch.sum(grad ** 2, dim=1)
             _, idx_crit = torch.topk(grad_norm, k=num_add, dim=-1)
-            critical_points = input_pc[idx_crit]
+            critical_points = points_ori[idx_crit]
 
-            delta2 = torch.randn_like(critical_points) * 1e-7
-            adv_point = (critical_points + delta2).clone().detach()
+            delta = torch.randn_like(critical_points) * 1e-7
+            adv_point = (critical_points + delta).clone().detach().requires_grad_(True)
             adv_point = self.enforce_fixed_dims(adv_point, critical_points)
-            adv_point.requires_grad = True
             optimizer = optim.Adam([adv_point], lr=attack_lr)
 
             for step in range(steps):
                 cat_data = torch.cat([points_ori, adv_point], dim=0)
-                cur_adv = self.enforce_fixed_dims(cat_data, cat_data)
-                cur_adv = cur_adv.detach()
-                new_inputs = {'img': data['inputs']['img'], 'points': [cur_adv]}
+                new_inputs = {'img': data['inputs']['img'], 'points': [cat_data]}
                 new_data = dict(inputs=new_inputs, data_samples=data['data_samples'])
                 pro_data = model.data_preprocessor(new_data, False)
                 inputs = pro_data['inputs']
@@ -239,10 +230,10 @@ class IOUSAttack:
                 loss_all.backward()
                 optimizer.step()
                 optimizer.zero_grad(set_to_none=True)
-                adv_point = adv_point.detach().requires_grad_(True)
+                adv_point = adv_point.detach().requires_grad_(True)  # 每步都new leaf
 
             cat_data = torch.cat([points_ori, adv_point], dim=0)
-            data['inputs']['points'][0] = cat_data.cpu()
+            data['inputs']['points'][0] = cat_data.detach().cpu()
             return data
 
         else:

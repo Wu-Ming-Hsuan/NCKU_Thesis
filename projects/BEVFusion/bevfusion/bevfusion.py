@@ -67,8 +67,9 @@ class BEVFusion(Base3DDetector):
         self.fractal_enhancer = MODELS.build(fractal_enhancer) if fractal_enhancer is not None else None
         self.nlm_layer = MODELS.build(nlm_layer) if nlm_layer is not None else None
         self.init_weights()
+        self.mode = None
         self.freeze_except = freeze_except or []
-        # self._freeze_modules()
+        # self._freeze_modules() # Training應該要凍結
     
     def _freeze_modules(self):
         for name, param in self.named_parameters():
@@ -248,6 +249,7 @@ class BEVFusion(Base3DDetector):
             - bbox_3d (:obj:`BaseInstance3DBoxes`): Prediction of bboxes,
                 contains a tensor with shape (num_instances, 7).
         """
+        self.mode = kwargs.get('mode', None)
         batch_input_metas = [item.metainfo for item in batch_data_samples]
         feats = self.extract_feat(batch_inputs_dict, batch_input_metas)
 
@@ -299,10 +301,10 @@ class BEVFusion(Base3DDetector):
             assert len(features) == 1, features
             x = features[0]
         
-        if self.fractal_enhancer is not None:
+        if self.fractal_enhancer is not None and self.mode!='blackbox':
             x = self.fractal_enhancer(x)
 
-        if self.nlm_layer is not None:
+        if self.nlm_layer is not None and self.mode!='blackbox':
             x = self.nlm_layer(x)
 
         x = self.pts_backbone(x)
@@ -313,6 +315,7 @@ class BEVFusion(Base3DDetector):
     def loss(self, batch_inputs_dict: Dict[str, Optional[Tensor]],
              batch_data_samples: List[Det3DDataSample],
              **kwargs) -> List[Det3DDataSample]:
+        self.mode = kwargs.get('mode', None)
         batch_input_metas = [item.metainfo for item in batch_data_samples]
         feats = self.extract_feat(batch_inputs_dict, batch_input_metas)
 

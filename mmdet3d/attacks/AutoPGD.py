@@ -15,7 +15,7 @@ class AutoPGD:
         self.alpha = alpha
         self.rand_init = rand_init
 
-    def run(self, model, data):
+    def run(self, model, data, mode):
         device = next(model.parameters()).device
         img = data['inputs']['img'][0].to(device).detach()
         points = data['inputs']['points'][0].to(device)
@@ -43,7 +43,7 @@ class AutoPGD:
             inputs = pro_data['inputs']
             data_samples = pro_data['data_samples']
 
-            loss_dict = model.loss(batch_inputs_dict=inputs, batch_data_samples=data_samples)
+            loss_dict = model.loss(batch_inputs_dict=inputs, batch_data_samples=data_samples, mode=mode)
             loss = sum(_loss for _loss in loss_dict.values() if isinstance(_loss, torch.Tensor))
 
             # 記錄最佳
