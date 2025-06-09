@@ -249,7 +249,7 @@ del _base_.custom_hooks
 custom_hooks = [
     dict(
         type='AttackHook',
-        attack_mode='whitebox', 
+        attack_mode='whitekbox', 
         attack_cfg=dict(
             type='AutoPGD'
         )

@@ -4,6 +4,7 @@ CUDA_VISIBLE_DEVICES=
 Training commands
 python tools/train.py projects/BEVFusion/configs/bevfusion_lidar-cam.py
 python tools/train.py projects/BEVFusion/configs/bevfusion_lidar-cam_nlm.py
+python tools/train.py projects/BEVFusion/configs/bevfusion_lidar-cam_attack.py
 
 bash tools/dist_train.sh projects/BEVFusion/configs/bevfusion_lidar-cam_nlm.py 2
 

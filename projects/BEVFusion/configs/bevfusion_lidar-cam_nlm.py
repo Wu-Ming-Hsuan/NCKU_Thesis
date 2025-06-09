@@ -3,7 +3,7 @@ _base_ = [
 ]
 
 # Load pretrained checkpoint
-load_from = "checkpoints/BEVFusion_cam_lidar_nlm.pth"
+load_from = "checkpoints/BEVFusion_cam_lidar.pth"
 
 # Add NLM layer configuration
 model = dict(
@@ -20,6 +20,7 @@ model = dict(
 custom_hooks = [
     dict(
         type='AttackHook',
+        attack_mode='whitekbox', 
         attack_cfg=dict(
             type='AutoPGD'
         )
