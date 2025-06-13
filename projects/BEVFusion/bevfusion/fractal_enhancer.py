@@ -70,10 +70,10 @@ class FractalBlock(nn.Module):
 class FractalEnhancer(nn.Module):
     def __init__(
         self,
-        in_channels,
-        img_size=(200, 200),
+        in_channels=256,
+        img_size=(180, 180),
         patch_size=4,
-        embed_dim=64,
+        embed_dim=256,
         depths=(2, 2),
         num_heads=(4, 4),
         norm_layer=nn.LayerNorm,
