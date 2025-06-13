@@ -8,6 +8,9 @@ python tools/train.py projects/BEVFusion/configs/bevfusion_lidar-cam_aug.py
 python tools/train.py projects/BEVFusion/configs/bevfusion_lidar-cam_attack.py
 
 bash tools/dist_train.sh projects/BEVFusion/configs/bevfusion_lidar-cam_nlm.py 2
+bash tools/dist_train.sh projects/BEVFusion/configs/bevfusion_lidar-cam_adv-nlm.py 2
+bash tools/dist_train.sh projects/BEVFusion/configs/bevfusion_lidar-cam_aug.py 2
+bash tools/dist_train.sh projects/BEVFusion/configs/bevfusion_lidar-cam_adv-aug.py 2
 
 --cfg-options load_from=""
 
