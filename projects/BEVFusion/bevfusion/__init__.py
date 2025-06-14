@@ -1,7 +1,7 @@
 from .bevfusion import BEVFusion
 from .bevfusion_necks import GeneralizedLSSFPN
 from .depth_lss import DepthLSSTransform, LSSTransform
-from .fractal_enhancer import FractalEnhancer
+from .fractal_defense import FractalDefense
 from .loading import BEVLoadMultiViewImageFromFiles
 from .nlm_layer import WindowNonLocalDenoising
 from .sparse_encoder import BEVFusionSparseEncoder
@@ -18,5 +18,5 @@ __all__ = [
     'HeuristicAssigner3D', 'DepthLSSTransform', 'LSSTransform',
     'BEVLoadMultiViewImageFromFiles', 'BEVFusionSparseEncoder',
     'TransformerDecoderLayer', 'BEVFusionRandomFlip3D',
-    'BEVFusionGlobalRotScaleTrans', 'WindowNonLocalDenoising', 'FractalEnhancer'
+    'BEVFusionGlobalRotScaleTrans', 'WindowNonLocalDenoising', 'FractalDefense'
 ]

@@ -7,10 +7,10 @@ load_from = "checkpoints/BEVFusion_cam_lidar.pth"
 
 # Add NLM layer configuration
 model = dict(
-    fractal_enhancer=dict(
-        type='FractalEnhancer',
+    fractal_defense=dict(
+        type='FractalDefense',
     ),
-    freeze_except=['fractal_enhancer']  # 凍結除了 nlm_layer 以外的所有模塊
+    freeze_except=['fractal_defense']  # 凍結除了 nlm_layer 以外的所有模塊
 )
 
 # custom_hooks = [
