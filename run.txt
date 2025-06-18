@@ -13,20 +13,14 @@ bash tools/dist_train.sh projects/BEVFusion/configs/bevfusion_lidar-cam_fractal.
 bash tools/dist_train.sh projects/BEVFusion/configs/bevfusion_lidar-cam_adv-fractal.py 2
 
 # Training 記得把 freeze 放回
-
+# Training dataloader dataset test_mode=False
 
 --cfg-options load_from=""
 
 Testing commands
-python tools/test.py projects/BEVFusion/configs/bevfusion_lidar-cam.py checkpoints/BEVFusion_cam_lidar.pth
-python tools/test.py projects/BEVFusion/configs/bevfusion_lidar-cam_nlm.py checkpoints/BEVFusion_cam_lidar.pth
-python tools/test.py projects/BEVFusion/configs/bevfusion_lidar-cam_attack.py checkpoints/BEVFusion_cam_lidar.pth
-python tools/test.py projects/BEVFusion/configs/bevfusion_lidar-cam_attack_defense.py checkpoints/BEVFusion_cam_lidar_nlm.pth
-python tools/test.py projects/BEVFusion/configs/bevfusion_lidar-cam_attack_defense.py checkpoints/BEVFusion_cam_lidar_adv-nlm.pth
+python tools/test.py projects/BEVFusion/configs/_val_bevfusion_lidar-cam_autopgd_none.py checkpoints/BEVFusion_cam_lidar.pth
 
-bash tools/dist_test.sh projects/BEVFusion/configs/bevfusion_lidar-cam.py checkpoints/BEVFusion_cam_lidar.pth 2
-bash tools/dist_test.sh projects/BEVFusion/configs/bevfusion_lidar-cam_attack.py checkpoints/BEVFusion_cam_lidar.pth 2
-bash tools/dist_test.sh projects/BEVFusion/configs/bevfusion_lidar-cam_attack-baseline.py checkpoints/BEVFusion_cam_lidar.pth 2
+bash tools/dist_test.sh projects/BEVFusion/configs/_val_bevfusion_lidar-cam_autopgd_none.py checkpoints/BEVFusion_cam_lidar.pth 2
 
 # freeze 要取消才能雙GPU運行
 # DDP中要使用model.module才能使用模型內部func

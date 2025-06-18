@@ -35,7 +35,8 @@ class BEVFusion(Base3DDetector):
         seg_head: Optional[dict] = None,
         fractal_defense: Optional[dict] = None, 
         nlm_layer: Optional[dict] = None,
-        freeze_except=None, 
+        freeze_modules: bool = False,
+        freeze_except: Optional[List[str]] = None,
         **kwargs,
     ) -> None:
         voxelize_cfg = data_preprocessor.pop('voxelize_cfg')
@@ -68,20 +69,29 @@ class BEVFusion(Base3DDetector):
         self.nlm_layer = MODELS.build(nlm_layer) if nlm_layer is not None else None
         self.init_weights()
         self.mode = None
+        self.freeze_modules_enabled = freeze_modules
         self.freeze_except = freeze_except or []
-        # self._freeze_modules() # Training應該要凍結
+        self._freeze_modules()
     
     def _freeze_modules(self):
+        if not self.freeze_modules_enabled or not self.freeze_except:
+            print('[Freeze] Skip freezing — either disabled or no except list.')
+            return
+
         for name, param in self.named_parameters():
-            if not any(name.startswith(k) for k in self.freeze_except):
+            if not any(k in name for k in self.freeze_except):
                 param.requires_grad = False
 
-        # 凍結 BatchNorm running stats，避免小 batch 造成統計漂移
+        # 再凍結 BatchNorm 層的參數與統計（不訓練它們）
         for m in self.modules():
             if isinstance(m, (torch.nn.BatchNorm2d, torch.nn.SyncBatchNorm)):
                 m.eval()
-                if not any(n.startswith(k) for k in self.freeze_except for n, _ in m.named_parameters(recurse=False)):
-                    m.requires_grad_(False)
+                for n, p in m.named_parameters(recurse=False):
+                    full_name = f"{type(m).__name__}.{n}"
+                    if not any(ex in full_name for ex in self.freeze_except):
+                        p.requires_grad = False
+
+        print(f"[Freeze] Done. Only training: {self.freeze_except}")
     
     def _forward(self,
                  batch_inputs: Tensor,
