@@ -181,7 +181,7 @@ train_dataloader = dict(
     dataset=dict(
         dataset=dict(pipeline=train_pipeline, modality=input_modality)))
 val_dataloader = dict(
-    dataset=dict(pipeline=test_pipeline, modality=input_modality))
+    dataset=dict(pipeline=test_pipeline, modality=input_modality, load_eval_anns=True, test_mode=True))
 test_dataloader = val_dataloader
 
 param_scheduler = [

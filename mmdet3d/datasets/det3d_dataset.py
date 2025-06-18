@@ -323,6 +323,7 @@ class Det3DDataset(BaseDataset):
             info['ann_info'] = self.parse_ann_info(info)
         if self.test_mode and self.load_eval_anns:
             info['eval_ann_info'] = self.parse_ann_info(info)
+            info['ann_info'] = self.parse_ann_info(info)
 
         return info
 
