@@ -16,6 +16,9 @@ class AutoPGD:
         self.rand_init = rand_init
 
     def run(self, model, data, mode):
+        if all(len(s.gt_instances_3d) == 0 for s in data['data_samples']):
+            return data
+        
         device = next(model.parameters()).device
         img = data['inputs']['img'][0].to(device).detach()
         points = data['inputs']['points'][0].to(device)
