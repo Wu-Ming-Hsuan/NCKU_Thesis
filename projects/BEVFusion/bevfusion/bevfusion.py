@@ -69,7 +69,7 @@ class BEVFusion(Base3DDetector):
         self.init_weights()
         self.mode = None
         self.freeze_except = freeze_except or []
-        self._freeze_modules() # Training應該要凍結
+        # self._freeze_modules() # Training應該要凍結
     
     def _freeze_modules(self):
         for name, param in self.named_parameters():

@@ -39,11 +39,11 @@ class AutoPGD:
             current_img = torch.clamp(adv_img, 0, 255)
             new_inputs = {'img': [current_img], 'points': [points]}
             adv_data = dict(inputs=new_inputs, data_samples=data_samples)
-            pro_data = model.data_preprocessor(adv_data, False)
+            pro_data = model.module.data_preprocessor(adv_data, False)
             inputs = pro_data['inputs']
             data_samples = pro_data['data_samples']
 
-            loss_dict = model.loss(batch_inputs_dict=inputs, batch_data_samples=data_samples, mode=mode)
+            loss_dict = model.module.loss(batch_inputs_dict=inputs, batch_data_samples=data_samples, mode=mode)
             loss = sum(_loss for _loss in loss_dict.values() if isinstance(_loss, torch.Tensor))
 
             # 記錄最佳
