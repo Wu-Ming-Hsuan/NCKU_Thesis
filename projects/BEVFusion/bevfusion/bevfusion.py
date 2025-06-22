@@ -144,10 +144,10 @@ class BEVFusion(Base3DDetector):
         return loss, log_vars  # type: ignore
 
     def init_weights(self) -> None:
-        if self.img_backbone is not None:
-            self.img_backbone.init_weights()
-        if self.nlm_layer is not None and hasattr(self.nlm_layer, 'init_weights'):
-            self.nlm_layer.init_weights()
+        for m in self.children():
+            if hasattr(m, 'init_weights') and callable(m.init_weights):
+                m.init_weights()
+
     @property
     def with_bbox_head(self):
         """bool: Whether the detector has a box head."""

@@ -2683,3 +2683,41 @@ class LaserMix(BaseTransform):
         repr_str += f'pre_transform={self.pre_transform}, '
         repr_str += f'prob={self.prob})'
         return repr_str
+
+@TRANSFORMS.register_module()
+class JPEG(BaseTransform):
+    
+    def __init__(self, quality: int = 60):
+        assert 1 <= quality <= 100
+        self.param = [cv2.IMWRITE_JPEG_QUALITY, quality]
+    
+    def _compress(self, img):
+        # Encode the image with JPEG compression
+        _, encoded_img = cv2.imencode('.jpg', img.astype(np.uint8), self.param)
+            
+        # Decode the compressed image
+        decoded_img = cv2.imdecode(encoded_img, cv2.IMREAD_COLOR)
+        
+        return decoded_img
+    
+    def transform(self, input_dict):
+        imgs = input_dict['img']
+        input_dict['img'] = [self._compress(img) for img in imgs]
+        return input_dict
+    
+@TRANSFORMS.register_module()
+class Blur(BaseTransform):
+
+    def __init__(self, ksize: int = 5, sigma: float = 1.5):
+        assert ksize % 2 == 1 and ksize > 0, "ksize 必須為正奇數"
+        assert sigma >= 0, "sigma 需 >= 0"
+        self.ksize = ksize
+        self.sigma = sigma
+
+    def _blur(self, img: np.ndarray) -> np.ndarray:
+        return cv2.GaussianBlur(img, (self.ksize, self.ksize), self.sigma)
+
+    def transform(self, input_dict: dict) -> dict:
+        imgs = input_dict["img"]
+        input_dict["img"] = [self._blur(im) for im in imgs]
+        return input_dict

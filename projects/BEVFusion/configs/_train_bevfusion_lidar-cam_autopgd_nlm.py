@@ -1,7 +1,7 @@
 _base_ = [
     './bevfusion_lidar_voxel0075_second_secfpn_8xb4-cyclic-20e_nus-3d.py'
 ]
-load_from = "checkpoints/BEVFusion_cam_lidar.pth"
+load_from = "checkpoints/BEVFusion_cam_lidar_nlm.pth"
 point_cloud_range = [-54.0, -54.0, -5.0, 54.0, 54.0, 3.0]
 input_modality = dict(use_lidar=True, use_camera=True)
 backend_args = None
@@ -59,6 +59,7 @@ model = dict(
     nlm_layer=dict(
         type='WindowNonLocalDenoising'
     ),
+    freeze_modules=True,
     freeze_except=['nlm_layer'])
 
 train_pipeline = [
@@ -182,7 +183,7 @@ train_dataloader = dict(
     dataset=dict(
         dataset=dict(pipeline=train_pipeline, modality=input_modality)))
 val_dataloader = dict(
-    dataset=dict(pipeline=test_pipeline, modality=input_modality, test_mode=False))
+    dataset=dict(pipeline=test_pipeline, modality=input_modality, filter_empty_gt=False, test_mode=False))
 test_dataloader = val_dataloader
 
 param_scheduler = [

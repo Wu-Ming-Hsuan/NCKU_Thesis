@@ -1,7 +1,6 @@
 _base_ = [
     './bevfusion_lidar_voxel0075_second_secfpn_8xb4-cyclic-20e_nus-3d.py'
 ]
-load_from = "checkpoints/BEVFusion_cam_lidar_fractal.pth"
 point_cloud_range = [-54.0, -54.0, -5.0, 54.0, 54.0, 3.0]
 input_modality = dict(use_lidar=True, use_camera=True)
 backend_args = None
@@ -55,11 +54,7 @@ model = dict(
         dbound=[1.0, 60.0, 0.5],
         downsample=2),
     fusion_layer=dict(
-        type='ConvFuser', in_channels=[80, 256], out_channels=256), 
-    fractal_defense=dict(
-        type='FractalDefense',
-    ),
-    freeze_except=['fractal_defense'])
+        type='ConvFuser', in_channels=[80, 256], out_channels=256))
 
 train_pipeline = [
     dict(
@@ -142,6 +137,8 @@ test_pipeline = [
         to_float32=True,
         color_type='color',
         backend_args=backend_args),
+    # dict(type='JPEG', quality=60),
+    dict(type='Blur', ksize=5, sigma=1.5),
     dict(
         type='LoadPointsFromFile',
         coord_type='LIDAR',
@@ -156,6 +153,11 @@ test_pipeline = [
         pad_empty_sweeps=True,
         remove_close=True,
         backend_args=backend_args),
+    dict(
+        type='LoadAnnotations3D',
+        with_bbox_3d=True,
+        with_label_3d=True,
+        with_attr_label=False),
     dict(
         type='ImageAug3D',
         final_dim=[256, 704],
@@ -178,11 +180,10 @@ test_pipeline = [
 ]
 
 train_dataloader = dict(
-    batch_size=1, 
     dataset=dict(
         dataset=dict(pipeline=train_pipeline, modality=input_modality)))
 val_dataloader = dict(
-    dataset=dict(pipeline=test_pipeline, modality=input_modality, filter_empty_gt=False, test_mode=False))
+    dataset=dict(pipeline=test_pipeline, modality=input_modality, load_eval_anns=True, test_mode=True))
 test_dataloader = val_dataloader
 
 param_scheduler = [
@@ -245,7 +246,7 @@ custom_hooks = [
         type='AttackHook',
         attack_mode='whitebox', 
         attack_cfg=dict(
-            type='AutoPGD'
+            type='PGD'
         )
     )
 ]

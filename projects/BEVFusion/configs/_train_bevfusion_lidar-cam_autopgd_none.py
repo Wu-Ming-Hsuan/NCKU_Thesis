@@ -1,7 +1,7 @@
 _base_ = [
     './bevfusion_lidar_voxel0075_second_secfpn_8xb4-cyclic-20e_nus-3d.py'
 ]
-load_from = "checkpoints/BEVFusion_cam_lidar_fractal.pth"
+load_from = "checkpoints/BEVFusion_cam_lidar.pth"
 point_cloud_range = [-54.0, -54.0, -5.0, 54.0, 54.0, 3.0]
 input_modality = dict(use_lidar=True, use_camera=True)
 backend_args = None
@@ -55,11 +55,7 @@ model = dict(
         dbound=[1.0, 60.0, 0.5],
         downsample=2),
     fusion_layer=dict(
-        type='ConvFuser', in_channels=[80, 256], out_channels=256), 
-    fractal_defense=dict(
-        type='FractalDefense',
-    ),
-    freeze_except=['fractal_defense'])
+        type='ConvFuser', in_channels=[80, 256], out_channels=256))
 
 train_pipeline = [
     dict(
