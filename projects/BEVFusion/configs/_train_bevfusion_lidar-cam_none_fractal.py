@@ -58,8 +58,7 @@ model = dict(
         type='ConvFuser', in_channels=[80, 256], out_channels=256), 
     fractal_defense=dict(
         type='FractalDefense',
-    ),
-    freeze_except=['fractal_defense'])
+    ))
 
 train_pipeline = [
     dict(
@@ -182,7 +181,7 @@ train_dataloader = dict(
     dataset=dict(
         dataset=dict(pipeline=train_pipeline, modality=input_modality)))
 val_dataloader = dict(
-    dataset=dict(pipeline=test_pipeline, modality=input_modality, test_mode=False))
+    dataset=dict(pipeline=test_pipeline, modality=input_modality, filter_empty_gt=False, test_mode=False))
 test_dataloader = val_dataloader
 
 param_scheduler = [

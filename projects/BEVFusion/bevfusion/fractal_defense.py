@@ -17,7 +17,6 @@ def pad_to_multiple(x, multiple):
         x = F.pad(x, (0, pad_w, 0, pad_h), mode="reflect")
     return x, pad_h, pad_w
 
-
 def unpad(x, pad_h, pad_w):
     """Remove padding added by pad_to_multiple."""
     if pad_h:
@@ -25,7 +24,6 @@ def unpad(x, pad_h, pad_w):
     if pad_w:
         x = x[..., :-pad_w]
     return x
-
 
 ############################
 # Patch Embed / UnEmbed
@@ -66,7 +64,6 @@ class PatchUnEmbed(nn.Module):
         B, N, C = x.shape
         return x.transpose(1, 2).view(B, C, self.h_res, self.w_res)
 
-
 ############################
 # Fractal‑NLM core module
 ############################
@@ -74,7 +71,7 @@ class PatchUnEmbed(nn.Module):
 class FractalNLMFilter(nn.Module):
     """Multi‑Scale + Symmetry Non‑Local module (Fractal‑NLM)."""
 
-    def __init__(self, dim=64, reduction=16, dilations=(1, 2, 3), token_batch=32, residual_scale=0.2):
+    def __init__(self, dim=64, reduction=18, dilations=(1, 2, 3), token_batch=32, residual_scale=0.2):
         super().__init__()
         self.dim = dim
         self.residual_scale = residual_scale
@@ -120,7 +117,6 @@ class FractalNLMFilter(nn.Module):
             out = torch.cat(outs, dim=1)
         out = out.transpose(1, 2).view(B, C, H, W)
         return x + self.residual_scale * out
-
 
 #########################################
 # Full purifier (patch‑token‑patch flow)

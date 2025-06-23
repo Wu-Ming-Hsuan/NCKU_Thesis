@@ -27,7 +27,7 @@ class WindowNonLocalDenoising(nn.Module):
         self.residual = residual
 
         if self.embed:
-            c_embed = max(in_channels // 2, 1)
+            c_embed = 144 # max(in_channels // 2, 1)
             self.theta_conv = nn.Conv2d(in_channels, c_embed, kernel_size=1, bias=False)
             self.phi_conv = nn.Conv2d(in_channels, c_embed, kernel_size=1, bias=False)
             with torch.no_grad():
