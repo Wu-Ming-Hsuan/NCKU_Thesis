@@ -33,8 +33,7 @@ class BEVFusion(Base3DDetector):
         bbox_head: Optional[dict] = None,
         init_cfg: OptMultiConfig = None,
         seg_head: Optional[dict] = None,
-        fractal_defense: Optional[dict] = None, 
-        nlm_layer: Optional[dict] = None,
+        defense: Optional[dict] = None, 
         freeze_modules: bool = False,
         freeze_except: Optional[List[str]] = None,
         **kwargs,
@@ -65,8 +64,7 @@ class BEVFusion(Base3DDetector):
         self.bbox_head = MODELS.build(bbox_head)
         
         # Add NLM denoising layer if specified
-        self.fractal_defense = MODELS.build(fractal_defense) if fractal_defense is not None else None
-        self.nlm_layer = MODELS.build(nlm_layer) if nlm_layer is not None else None
+        self.defense = MODELS.build(defense) if defense is not None else None
         self.init_weights()
         self.mode = None
         self.freeze_modules_enabled = freeze_modules
@@ -311,11 +309,8 @@ class BEVFusion(Base3DDetector):
             assert len(features) == 1, features
             x = features[0]
         
-        if self.fractal_defense is not None and self.mode!='blackbox':
-            x = self.fractal_defense(x)
-
-        if self.nlm_layer is not None and self.mode!='blackbox':
-            x = self.nlm_layer(x)
+        if self.defense is not None and self.mode!='blackbox':
+            x = self.defense(x)
 
         x = self.pts_backbone(x)
         x = self.pts_neck(x)

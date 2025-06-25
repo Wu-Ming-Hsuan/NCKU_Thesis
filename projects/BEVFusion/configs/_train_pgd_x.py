@@ -1,6 +1,7 @@
 _base_ = [
     './bevfusion_lidar_voxel0075_second_secfpn_8xb4-cyclic-20e_nus-3d.py'
 ]
+load = 'checkpoints/BEVFusion.pth'
 point_cloud_range = [-54.0, -54.0, -5.0, 54.0, 54.0, 3.0]
 input_modality = dict(use_lidar=True, use_camera=True)
 backend_args = None
@@ -233,3 +234,13 @@ default_hooks = dict(
     logger=dict(type='LoggerHook', interval=50),
     checkpoint=dict(type='CheckpointHook', interval=1))
 del _base_.custom_hooks
+
+custom_hooks = [
+    dict(
+        type='AttackHook',
+        attack_mode='whitebox', 
+        attack_cfg=dict(
+            type='PGD'
+        )
+    )
+]

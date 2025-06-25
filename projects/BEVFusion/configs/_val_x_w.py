@@ -55,8 +55,8 @@ model = dict(
         downsample=2),
     fusion_layer=dict(
         type='ConvFuser', in_channels=[80, 256], out_channels=256), 
-    fractal_defense=dict(
-        type='FractalDefense',
+    defense=dict(
+        type='WNLM'
     ))
 
 train_pipeline = [
@@ -155,11 +155,6 @@ test_pipeline = [
         remove_close=True,
         backend_args=backend_args),
     dict(
-        type='LoadAnnotations3D',
-        with_bbox_3d=True,
-        with_label_3d=True,
-        with_attr_label=False),
-    dict(
         type='ImageAug3D',
         final_dim=[256, 704],
         resize_lim=[0.48, 0.48],
@@ -184,7 +179,7 @@ train_dataloader = dict(
     dataset=dict(
         dataset=dict(pipeline=train_pipeline, modality=input_modality)))
 val_dataloader = dict(
-    dataset=dict(pipeline=test_pipeline, modality=input_modality, load_eval_anns=True, test_mode=True))
+    dataset=dict(pipeline=test_pipeline, modality=input_modality))
 test_dataloader = val_dataloader
 
 param_scheduler = [
@@ -241,13 +236,3 @@ default_hooks = dict(
     logger=dict(type='LoggerHook', interval=50),
     checkpoint=dict(type='CheckpointHook', interval=1))
 del _base_.custom_hooks
-
-custom_hooks = [
-    dict(
-        type='AttackHook',
-        attack_mode='whitebox', 
-        attack_cfg=dict(
-            type='AutoPGD'
-        )
-    )
-]

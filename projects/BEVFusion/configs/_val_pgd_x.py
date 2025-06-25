@@ -152,11 +152,6 @@ test_pipeline = [
         remove_close=True,
         backend_args=backend_args),
     dict(
-        type='LoadAnnotations3D',
-        with_bbox_3d=True,
-        with_label_3d=True,
-        with_attr_label=False),
-    dict(
         type='ImageAug3D',
         final_dim=[256, 704],
         resize_lim=[0.48, 0.48],
@@ -181,7 +176,7 @@ train_dataloader = dict(
     dataset=dict(
         dataset=dict(pipeline=train_pipeline, modality=input_modality)))
 val_dataloader = dict(
-    dataset=dict(pipeline=test_pipeline, modality=input_modality, load_eval_anns=True, test_mode=True))
+    dataset=dict(pipeline=test_pipeline, modality=input_modality))
 test_dataloader = val_dataloader
 
 param_scheduler = [

@@ -1,7 +1,6 @@
 _base_ = [
     './bevfusion_lidar_voxel0075_second_secfpn_8xb4-cyclic-20e_nus-3d.py'
 ]
-load_from = "work_dirs/_train_bevfusion_lidar-cam_pgd_none/20250624_221538/epoch_6.pth"
 point_cloud_range = [-54.0, -54.0, -5.0, 54.0, 54.0, 3.0]
 input_modality = dict(use_lidar=True, use_camera=True)
 backend_args = None
@@ -55,7 +54,10 @@ model = dict(
         dbound=[1.0, 60.0, 0.5],
         downsample=2),
     fusion_layer=dict(
-        type='ConvFuser', in_channels=[80, 256], out_channels=256))
+        type='ConvFuser', in_channels=[80, 256], out_channels=256), 
+    defense=dict(
+        type='SAMSNLM'
+    ))
 
 train_pipeline = [
     dict(
@@ -174,11 +176,10 @@ test_pipeline = [
 ]
 
 train_dataloader = dict(
-    batch_size=1, 
     dataset=dict(
         dataset=dict(pipeline=train_pipeline, modality=input_modality)))
 val_dataloader = dict(
-    dataset=dict(pipeline=test_pipeline, modality=input_modality, filter_empty_gt=False, test_mode=False))
+    dataset=dict(pipeline=test_pipeline, modality=input_modality))
 test_dataloader = val_dataloader
 
 param_scheduler = [
@@ -241,7 +242,7 @@ custom_hooks = [
         type='AttackHook',
         attack_mode='whitebox', 
         attack_cfg=dict(
-            type='PGD'
+            type='FGSM'
         )
     )
 ]

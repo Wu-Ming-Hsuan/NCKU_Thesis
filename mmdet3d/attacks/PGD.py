@@ -5,7 +5,7 @@ from .registry import ATTACKS
 @ATTACKS.register_module()
 class PGD:
     def __init__(self,
-                 epsilon=8,
+                 epsilon=16,
                  steps=10,
                  alpha=None):
         """
