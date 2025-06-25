@@ -3,7 +3,7 @@ CUDA_VISIBLE_DEVICES=
 
 Training commands
 python tools/train.py projects/BEVFusion/configs/bevfusion_lidar-cam.python
-
+CUDA_VISIBLE_DEVICES=0,1,2,3 bash tools/dist_train.sh projects/BEVFusion/configs/_train_bevfusion_lidar-cam_none_nlm-fractal.py 4
 bash tools/dist_train.sh projects/BEVFusion/configs/_train_bevfusion_lidar-cam_none_none.py 2
 bash tools/dist_train.sh projects/BEVFusion/configs/_train_bevfusion_lidar-cam_none_nlm.py 2
 bash tools/dist_train.sh projects/BEVFusion/configs/_train_bevfusion_lidar-cam_none_fractal.py 2

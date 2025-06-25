@@ -5,7 +5,7 @@ from mmdet3d.registry import MODELS
 
 
 @MODELS.register_module()
-class WindowNonLocalDenoising(nn.Module):
+class WNLM(nn.Module):
     """
     Block-wise (windowed) Non-Local Means for BEV feature denoising.
     Applies self-similarity-based attention within local windows to reduce noise.
