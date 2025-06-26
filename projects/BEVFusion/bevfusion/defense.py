@@ -1,3 +1,4 @@
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -164,7 +165,7 @@ class PatchUnEmbed(nn.Module):
 # Fractal‑NLM core module
 ############################
 
-class SAMANLMFilter(nn.Module):
+class SAMSNLMFilter(nn.Module):
     """Multi‑Scale + Symmetry Non‑Local module."""
 
     def __init__(self, dim=64, reduction=18, dilations=(1, 2, 3), token_batch=32, residual_scale=0.2):
@@ -219,13 +220,13 @@ class SAMANLMFilter(nn.Module):
 #########################################
 
 @MODELS.register_module()
-class SAMANNLM(nn.Module):
+class SAMSNLM(nn.Module):
     """End‑to‑end pre‑filter that wraps Patch⇄Token⇄Patch and Fractal‑NLM."""
 
     def __init__(self, in_chans=256, embed_dim=256, img_size=180, patch_size=1, **kwargs):
         super().__init__()
         self.patch_embed = PatchEmbed(img_size, patch_size, in_chans, embed_dim)
-        self.nlm = SAMANNLMFilter(dim=embed_dim, **kwargs)
+        self.nlm = SAMSNLMFilter(dim=embed_dim, **kwargs)
         self.patch_unembed = PatchUnEmbed(img_size, patch_size, embed_dim)
 
     def forward(self, x):
