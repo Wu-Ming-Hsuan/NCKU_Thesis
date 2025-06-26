@@ -1,239 +1,353 @@
+import cv2
 import math
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from typing import List, Tuple
 from mmdet3d.registry import MODELS
 
-####################################################################################################
-# W NLM
-####################################################################################################
+################################################################################
+# PNLM — Patch-wise Non-Local Mean denoising block
+################################################################################
+
 @MODELS.register_module()
-class WNLM(nn.Module):
-    """
-    Block-wise (windowed) Non-Local Means for BEV feature denoising.
-    Applies self-similarity-based attention within local windows to reduce noise.
-    """
+class PNLM(nn.Module):
+    @staticmethod
+    def _pad(x: torch.Tensor, k: int) -> Tuple[torch.Tensor, int, int]:
+        """Reflect‑pad so H,W are multiples of *k*; return (x_pad, ph, pw)."""
+        _, _, h, w = x.shape
+        ph, pw = (k - h % k) % k, (k - w % k) % k
+        return F.pad(x, (0, pw, 0, ph), mode="reflect"), ph, pw
 
-    def __init__(self,
-                 in_channels=256,
-                 window_size=15,
-                 embed=True,
-                 softmax=True,
-                 zero_init=True,
-                 residual=True):
+    @staticmethod
+    def _unpad(x: torch.Tensor, ph: int, pw: int) -> torch.Tensor:
+        if ph:
+            x = x[..., :-ph, :]
+        if pw:
+            x = x[..., :-pw]
+        return x
+
+    @staticmethod
+    def _blockify(x: torch.Tensor, k: int) -> torch.Tensor:
+        """Split B×C×H×W into blocks (B',C,k,k) where B'=B·H//k·W//k."""
+        b, c, h, w = x.shape
+        x = x.view(b, c, h // k, k, w // k, k)
+        x = x.permute(0, 2, 4, 1, 3, 5).contiguous()
+        return x.view(-1, c, k, k)
+
+    @staticmethod
+    def _unblockify(blocks: torch.Tensor, b: int, c: int, h: int, w: int, k: int) -> torch.Tensor:
+        nh, nw = h // k, w // k
+        x = blocks.view(b, nh, nw, c, k, k).permute(0, 3, 1, 4, 2, 5)
+        return x.contiguous().view(b, c, h, w)
+
+    # ------------------------------------------------------------------ ctor
+    def __init__(
+        self,
+        in_channels: int = 256,
+        window_size: int = 15,
+        embed_channels: int = 144,
+        use_softmax: bool = True,
+        zero_init_proj: bool = True,
+        with_residual: bool = True,
+    ) -> None:
         super().__init__()
-        self.in_channels = in_channels
-        self.window_size = window_size
-        self.embed = embed
-        self.softmax = softmax
-        self.zero_init = zero_init
-        self.residual = residual
+        self.c = in_channels
+        self.k = window_size
+        self.use_softmax = use_softmax
+        self.with_residual = with_residual
 
-        if self.embed:
-            c_embed = 144 # max(in_channels // 2, 1)
-            self.theta_conv = nn.Conv2d(in_channels, c_embed, kernel_size=1, bias=False)
-            self.phi_conv = nn.Conv2d(in_channels, c_embed, kernel_size=1, bias=False)
-            with torch.no_grad():
-                nn.init.normal_(self.theta_conv.weight, std=0.01)
-                nn.init.normal_(self.phi_conv.weight, std=0.01)
-        else:
-            self.theta_conv = self.phi_conv = nn.Identity()
+        c_emb = embed_channels #max(in_channels // 2, 1)
+        self.to_q = nn.Conv2d(in_channels, c_emb, 1, bias=False) if c_emb != in_channels else nn.Identity()
+        self.to_k = nn.Conv2d(in_channels, c_emb, 1, bias=False) if c_emb != in_channels else nn.Identity()
+        self.proj_out = nn.Conv2d(in_channels, in_channels, 1, bias=False)
+        if zero_init_proj:
+            nn.init.zeros_(self.proj_out.weight)
 
-        self.projection = nn.Conv2d(in_channels, in_channels, kernel_size=1, bias=False)
-        if self.zero_init:
-            nn.init.zeros_(self.projection.weight)
+    def _attention(self, blocks: torch.Tensor) -> torch.Tensor:
+        b, _, k, _ = blocks.shape
+        q = self.to_q(blocks).flatten(2).transpose(1, 2)  # (B',N,Ce)
+        k_mat = self.to_k(blocks).flatten(2)              # (B',Ce,N)
+        v = blocks.flatten(2).transpose(1, 2)             # (B',N,C)
+        att = q @ k_mat                                   # (B',N,N)
+        if self.use_softmax:
+            att = F.softmax(att / math.sqrt(q.size(-1)), dim=-1)
+        y = (att @ v).transpose(1, 2).view(b, self.c, k, k)
+        return self.proj_out(y)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        B, C, H, W = x.shape
-        ws = self.window_size
-
-        # 自動補齊 padding 使其可被 window size 整除
-        pad_h = (ws - H % ws) % ws
-        pad_w = (ws - W % ws) % ws
-        x = F.pad(x, (0, pad_w, 0, pad_h), mode='reflect')  # [B, C, H_pad, W_pad]
-        Hp, Wp = x.shape[2:]
-
-        # Unfold into windows: [B, C, Nh, Nw, ws, ws] → [B*Nh*Nw, C, ws, ws]
-        x_patches = x.unfold(2, ws, ws).unfold(3, ws, ws)
-        Nh, Nw = x_patches.shape[2:4]
-        x_patches = x_patches.permute(0, 2, 3, 1, 4, 5).contiguous()
-        x_patches = x_patches.view(-1, C, ws, ws)  # [B×Nh×Nw, C, ws, ws]
-
-        # Denoising
-        y_patches = self._block_nlm(x_patches)  # [B×Nh×Nw, C, ws, ws]
-
-        # Fold back: [B×Nh×Nw, C, ws, ws] → [B, C, Hp, Wp]
-        y = y_patches.view(B, Nh, Nw, C, ws, ws)
-        y = y.permute(0, 3, 1, 4, 2, 5).contiguous().view(B, C, Hp, Wp)
-
-        # Remove padding
-        y = y[:, :, :H, :W]
-
-        return x[:, :, :H, :W] + y if self.residual else y
-
-    def _block_nlm(self, x: torch.Tensor) -> torch.Tensor:
-        # x: [B_p, C, ws, ws]
-        theta = self.theta_conv(x)
-        phi = self.phi_conv(x)
-        g = x
-
-        B_p, C_emb, ws, _ = theta.shape
-        window_area = ws * ws
-
-        theta = theta.view(B_p, C_emb, -1).transpose(1, 2)  # [B_p, N, C_emb]
-        phi = phi.view(B_p, C_emb, -1)                      # [B_p, C_emb, N]
-        g = g.view(B_p, self.in_channels, -1).transpose(1, 2)  # [B_p, N, C]
-
-        # Similarity: [B_p, N, N]
-        affinity = torch.bmm(theta, phi)
-        if self.softmax:
-            affinity = affinity / (C_emb ** 0.5)
-            affinity = F.softmax(affinity, dim=-1)
-
-        # Weighted feature
-        out = torch.bmm(affinity, g)  # [B_p, N, C]
-        out = out.transpose(1, 2).contiguous().view(B_p, self.in_channels, ws, ws)
-        return self.projection(out)
+        b, c, h, w = x.shape
+        x_pad, ph, pw = self._pad(x, self.k)
+        blocks = self._blockify(x_pad, self.k)
+        y_blocks = self._attention(blocks)
+        y = self._unblockify(y_blocks, b, c, *x_pad.shape[2:], self.k)
+        y = self._unpad(y, ph, pw)
+        return x + y if self.with_residual else y
 
 
-####################################################################################################
-# SAMS NLM
-####################################################################################################
+################################################################################
+# AMHSA — Augmented multi‑head self-attention denoising block
+################################################################################
 
+@MODELS.register_module()
+class AMHSA(nn.Module):
+    """Symmetric Multi‑Scale **multi‑head** self‑attention with residual.
 
-#########################
-# Helper functions
-#########################
+    Method order：helpers → __init__ → _attention → forward
+    """
 
-def pad_to_multiple(x, multiple):
-    """Pad H and W so they are divisible by ``multiple``."""
-    _, _, H, W = x.shape
-    pad_h = (multiple - H % multiple) % multiple
-    pad_w = (multiple - W % multiple) % multiple
-    if pad_h or pad_w:
-        x = F.pad(x, (0, pad_w, 0, pad_h), mode="reflect")
-    return x, pad_h, pad_w
-
-def unpad(x, pad_h, pad_w):
-    """Remove padding added by pad_to_multiple."""
-    if pad_h:
-        x = x[..., :-pad_h, :]
-    if pad_w:
-        x = x[..., :-pad_w]
-    return x
-
-############################
-# Patch Embed / UnEmbed
-############################
-
-class PatchEmbed(nn.Module):
-    """Flatten non‑overlapping patches to token sequence."""
-
-    def __init__(self, img_size=224, patch_size=1, in_chans=3, embed_dim=64):
-        super().__init__()
-        if isinstance(img_size, int):
-            img_size = (img_size, img_size)
-        if isinstance(patch_size, int):
-            patch_size = (patch_size, patch_size)
-        self.h_res = img_size[0] // patch_size[0]
-        self.w_res = img_size[1] // patch_size[1]
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
-
-    def forward(self, x):
-        x = self.proj(x)
-        B, C, H, W = x.shape
-        return x.flatten(2).transpose(1, 2)
-
-class PatchUnEmbed(nn.Module):
-    """Restore (B,N,D) tokens to feature map."""
-
-    def __init__(self, img_size=224, patch_size=1, embed_dim=64):
-        super().__init__()
-        if isinstance(img_size, int):
-            img_size = (img_size, img_size)
-        if isinstance(patch_size, int):
-            patch_size = (patch_size, patch_size)
-        self.h_res = img_size[0] // patch_size[0]
-        self.w_res = img_size[1] // patch_size[1]
-        self.embed_dim = embed_dim
-
-    def forward(self, x):
-        B, N, C = x.shape
-        return x.transpose(1, 2).view(B, C, self.h_res, self.w_res)
-
-############################
-# Fractal‑NLM core module
-############################
-
-class SAMSNLMFilter(nn.Module):
-    """Multi‑Scale + Symmetry Non‑Local module."""
-
-    def __init__(self, dim=64, reduction=18, dilations=(1, 2, 3), token_batch=32, residual_scale=0.2):
-        super().__init__()
-        self.dim = dim
-        self.residual_scale = residual_scale
-        inner_dim = dim // reduction
-        self.reduce = nn.Conv2d(dim, inner_dim, 1)
-        self.dil_convs = nn.ModuleList(
-            [nn.Conv2d(inner_dim, inner_dim, 3, padding=d, dilation=d) for d in dilations]
-        )
-        self.fuse = nn.Conv2d(inner_dim * len(dilations) * 6, dim, 1)
-        self.token_batch = token_batch
-
-    # six C4 symmetry transforms (identity, LR flip, UD flip, 90/180/270 rot)
+    # -------------------------- helper functions (static) -------------------
     @staticmethod
-    def _c4_transforms(x):
+    def _aug(x: torch.Tensor) -> List[torch.Tensor]:
+        """rotat: 0°, 90°, 180°, 270° + H-flip + V-flip."""
         return [
             x,
-            torch.flip(x, [-1]),
-            torch.flip(x, [-2]),
+            torch.flip(x, (-1,)),
+            torch.flip(x, (-2,)),
             torch.rot90(x, 1, (-2, -1)),
             torch.rot90(x, 2, (-2, -1)),
             torch.rot90(x, 3, (-2, -1)),
         ]
 
+    # ----------------------- multi‑scale symmetric ---------------------
+    def _ms(self, x: torch.Tensor) -> torch.Tensor:
+        z = self.reduce(x)
+        rot_z = self._aug(z)
+        feats: List[torch.Tensor] = []
+        for conv in self.dilated:
+            y = conv(z)
+            feats.extend(y * r for r in rot_z)
+        return self.fuse(torch.cat(feats, 1))
+
+    def __init__(
+        self,
+        in_channels: int = 256,
+        d_model: int = 256,
+        n_heads: int = 4,
+        patch: int = 1,
+        reduction: int = 18,
+        dilations: Tuple[int, ...] = (1, 2, 3),
+        residual_scale: float = 0.2,
+    ) -> None:
+        super().__init__()
+        assert d_model % n_heads == 0, "d_model must be divisible by n_heads"
+        self.nh = n_heads
+        self.dh = d_model // n_heads
+        self.scale_qk = 1 / math.sqrt(self.dh)
+        self.res_scale = residual_scale
+
+        # patch embed / de‑embed
+        self.to_tokens = nn.Conv2d(in_channels, d_model, patch, patch)
+        self.to_feats = nn.ConvTranspose2d(d_model, in_channels, patch, patch)
+
+        # multi‑scale symmetric bias branch
+        c_mid = d_model // reduction
+        self.reduce = nn.Conv2d(d_model, c_mid, 1)
+        self.dilated = nn.ModuleList([
+            nn.Conv2d(c_mid, c_mid, 3, padding=d, dilation=d) for d in dilations
+        ])
+        self.fuse = nn.Conv2d(c_mid * len(dilations) * 6, d_model, 1)
+
+        # QKV & output projections
+        self.qkv = nn.Conv2d(d_model, d_model * 3, 1, bias=False)
+        self.proj_out = nn.Conv2d(d_model, d_model, 1, bias=False)
+        nn.init.zeros_(self.proj_out.weight)
+
+    # -------------- 🧩 multi‑head scaled‑dot‑product attention --------------
+    def _attention(self, token: torch.Tensor) -> torch.Tensor:
+        """Apply multi‑head attention over flattened spatial tokens."""
+        b, _, h_t, w_t = token.shape
+        n = h_t * w_t
+        qkv = self.qkv(token).reshape(b, 3, self.nh, self.dh, n)
+        q, k, v = qkv.unbind(1)  # each: (B, nh, dh, N)
+
+        att = torch.einsum("bhdn,bhdm->bhnm", q, k) * self.scale_qk
+        att = att.softmax(-1)
+        out = torch.einsum("bhnm,bhdm->bhdn", att, v)
+        return out.reshape(b, -1, h_t, w_t)  # merge heads
+
+    # ------------------------------ forward pass ----------------------------
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Full pipeline: embed → add bias → attention → project → residual."""
+        # 1) Patch‑to‑token embed
+        token = self.to_tokens(x)
+
+        # 2) Add symmetric multi‑scale bias
+        token = token + self._ms_bias(token)
+
+        # 3) Multi‑head attention in token space
+        att_out = self._attention(token)
+        att_out = self.proj_out(att_out)
+        token = token + att_out  # residual in token space
+
+        # 4) Token‑to‑feature and residual to input
+        feat = self.to_feats(token)
+        return x + feat * self.res_scale
+    
+# --------------------------------------------------------------------------- #
+# 共用：高斯 kernel 產生器
+# --------------------------------------------------------------------------- #
+def _gaussian_kernel(ksize: int, sigma: float, dtype=torch.float32):
+    ax = torch.arange(ksize, dtype=dtype) - ksize // 2
+    gauss = torch.exp(-0.5 * (ax ** 2) / sigma ** 2)
+    kernel_1d = gauss / gauss.sum()
+    kernel_2d = kernel_1d[:, None] @ kernel_1d[None, :]
+    return kernel_2d
+
+# --------------------------------------------------------------------------- #
+# 1. GaussianBlur (feature)
+# --------------------------------------------------------------------------- #
+@MODELS.register_module()
+class GaussianBlur(nn.Module):
+    def __init__(
+        self,
+        in_channels: int = 256,
+        ksize: int = 5,
+        sigma: float = 1.5,
+        with_residual: bool = True,
+        res_scale: float = 0.2,
+    ):
+        super().__init__()
+        assert ksize % 2 == 1 and ksize > 0
+        kernel = _gaussian_kernel(ksize, sigma)   # (k,k)
+        self.register_buffer(
+            "weight",
+            kernel.expand(in_channels, 1, ksize, ksize)
+        )
+        self.groups = in_channels
+        self.pad = ksize // 2
+        self.with_residual = with_residual
+        self.res_scale = res_scale
+
+    def forward(self, x):
+        y = F.conv2d(x, self.weight, padding=self.pad, groups=self.groups)
+        return x + self.res_scale * (y - x) if self.with_residual else y
+
+# --------------------------------------------------------------------------- #
+# 2. MedianBlur
+# --------------------------------------------------------------------------- #
+@MODELS.register_module()
+class MedianBlur(nn.Module):
+    def __init__(
+        self,
+        ksize: int = 3,
+        with_residual: bool = True,
+        res_scale: float = 0.2,
+    ):
+        super().__init__()
+        assert ksize % 2 == 1 and ksize > 1
+        self.ksize = ksize
+        self.with_residual = with_residual
+        self.res_scale = res_scale
+
     def forward(self, x):
         B, C, H, W = x.shape
-        x_red = self.reduce(x)  # (B, C//r, H, W)
-        feats = []
-        for conv in self.dil_convs:
-            conv_out = conv(x_red)
-            for tf in self._c4_transforms(x_red):
-                feats.append(conv_out * tf)
-        cat = torch.cat(feats, dim=1)
-        fused = self.fuse(cat)
-        tokens = fused.flatten(2).transpose(1, 2)
-        if self.token_batch is None or tokens.shape[1] <= self.token_batch:
-            attn = torch.softmax(tokens @ tokens.transpose(1, 2) / math.sqrt(C), dim=-1)
-            out = attn @ tokens
-        else:
-            outs = []
-            for chunk in tokens.split(self.token_batch, dim=1):
-                attn_chunk = torch.softmax(chunk @ tokens.transpose(1, 2) / math.sqrt(C), dim=-1)
-                outs.append(attn_chunk @ tokens)
-            out = torch.cat(outs, dim=1)
-        out = out.transpose(1, 2).view(B, C, H, W)
-        return x + self.residual_scale * out
+        unfold = F.unfold(x, self.ksize, padding=self.ksize // 2)  # (B, C·k², H·W)
+        med = unfold.view(B, C, self.ksize ** 2, H, W).median(dim=2).values
+        return x + self.res_scale * (med - x) if self.with_residual else med
 
-#########################################
-# Full purifier (patch‑token‑patch flow)
-#########################################
-
+# --------------------------------------------------------------------------- #
+# 3. MeanBlur (= AvgPool)
+# --------------------------------------------------------------------------- #
 @MODELS.register_module()
-class SAMSNLM(nn.Module):
-    """End‑to‑end pre‑filter that wraps Patch⇄Token⇄Patch and Fractal‑NLM."""
-
-    def __init__(self, in_chans=256, embed_dim=256, img_size=180, patch_size=1, **kwargs):
+class MeanBlur(nn.Module):
+    def __init__(
+        self,
+        ksize: int = 3,
+        with_residual: bool = True,
+        res_scale: float = 0.2,
+    ):
         super().__init__()
-        self.patch_embed = PatchEmbed(img_size, patch_size, in_chans, embed_dim)
-        self.nlm = SAMSNLMFilter(dim=embed_dim, **kwargs)
-        self.patch_unembed = PatchUnEmbed(img_size, patch_size, embed_dim)
+        assert ksize % 2 == 1 and ksize > 1
+        self.ksize = ksize
+        self.with_residual = with_residual
+        self.res_scale = res_scale
 
     def forward(self, x):
-        ori_size = x.shape[-2:]
-        tokens = self.patch_embed(x)
-        fmap = self.patch_unembed(tokens)
-        cleaned = self.nlm(fmap)
-        if cleaned.shape[-2:] != ori_size:
-            cleaned = F.interpolate(cleaned, size=ori_size, mode="bilinear", align_corners=False)
-        return cleaned
+        y = F.avg_pool2d(x, self.ksize, stride=1, padding=self.ksize // 2)
+        return x + self.res_scale * (y - x) if self.with_residual else y
+
+# --------------------------------------------------------------------------- #
+# 4. Bit-Depth Reduction (float → n bits quantisation)
+# --------------------------------------------------------------------------- #
+@MODELS.register_module()
+class BitDepth(nn.Module):
+    def __init__(
+        self,
+        bits: int = 5,
+        with_residual: bool = False,  # 通常直接量化不殘差
+    ):
+        super().__init__()
+        assert 1 <= bits <= 16
+        self.levels = 2 ** bits
+        self.with_residual = with_residual
+
+    def forward(self, x):
+        # 假設 feature 已經經過 BN，大多分佈在 [-3,3]；用 tanh 壓到 [-1,1] 再做均勻量化
+        z = torch.tanh(x)
+        y = torch.round((z + 1) * (self.levels / 2 - 1)) / (self.levels / 2 - 1) - 1
+        # 反投回原空間
+        y = 0.5 * torch.log((1 + y) / (1 - y) + 1e-6)
+        return x + (y - x) if self.with_residual else y
+
+# --------------------------------------------------------------------------- #
+# 5. Bilateral-like (spatial Gaussian × channel-wise BN weight)
+# --------------------------------------------------------------------------- #
+@MODELS.register_module()
+class Bilateral(nn.Module):
+    """簡化 Bilateral：空間高斯 + 通道標準差當作 range term 權重。"""
+
+    def __init__(
+        self,
+        in_channels: int = 256,
+        ksize: int = 5,
+        sigma: float = 1.0,
+        with_residual: bool = True,
+        res_scale: float = 0.2,
+    ):
+        super().__init__()
+        kernel = _gaussian_kernel(ksize, sigma)
+        self.register_buffer("spa", kernel[None, None])  # (1,1,k,k)
+        self.pad = ksize // 2
+        self.with_residual = with_residual
+        self.res_scale = res_scale
+
+    def forward(self, x):
+        # 以 channel-wise variance approximate "range" term
+        var = x.var(dim=(2, 3), keepdim=True) + 1e-6         # (B,C,1,1)
+        weight = self.spa / (1 + var)                        # (B,C,k,k) broadcasting
+        y = F.conv2d(x, weight, padding=self.pad, groups=x.size(1))
+        return x + self.res_scale * (y - x) if self.with_residual else y
+
+# --------------------------------------------------------------------------- #
+# 6. Non-Local Means (NLMean-Lite)
+# --------------------------------------------------------------------------- #
+@MODELS.register_module()
+class NLMFeat(nn.Module):
+    """局部 NLM：在 r×r 視窗上計算相似度後加權平均（簡化版）."""
+
+    def __init__(
+        self,
+        search_radius: int = 3,
+        h: float = 0.1,
+        with_residual: bool = True,
+        res_scale: float = 0.2,
+    ):
+        super().__init__()
+        self.r = search_radius
+        self.h2 = h * h
+        self.with_residual = with_residual
+        self.res_scale = res_scale
+
+    def forward(self, x):
+        B, C, H, W = x.shape
+        pad = self.r
+        unfold = F.unfold(x, 2 * pad + 1, padding=pad)   # (B, C·k², H·W)
+        neigh = unfold.view(B, C, -1, H, W)              # (B,C,k²,H,W)
+        center = x.unsqueeze(2)                          # (B,C,1,H,W)
+        dist2 = (neigh - center).pow(2).mean(1, keepdim=True)  # (B,1,k²,H,W)
+        weight = torch.exp(-dist2 / self.h2)             # Gaussian in feature space
+        weight = weight / weight.sum(2, keepdim=True)
+        y = (weight * neigh).sum(2)                      # (B,C,H,W)
+        return x + self.res_scale * (y - x) if self.with_residual else y
