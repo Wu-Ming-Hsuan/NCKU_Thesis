@@ -6,6 +6,8 @@ Training commands
 ##############################
 bash tools/dist_train.sh projects/BEVFusion/configs/_train_x_x.py 2
 
+bash tools/dist_train.sh projects/BEVFusion/configs/_train_pgd_x.py 2
+
 1. load_from='{weight}'
 2. defense=dict(type='{defense name}') # freeze with freeze_modules=True and freeze_except=['defense']
 3. train_dataloader batch_size=1, 
@@ -15,30 +17,34 @@ bash tools/dist_train.sh projects/BEVFusion/configs/_train_x_x.py 2
 ##############################
 Testing commands
 ##############################
-bash tools/dist_test.sh projects/BEVFusion/configs/_val_x_x.py checkpoints/BEVFusion.pth 2
+bash tools/dist_test.sh projects/BEVFusion/configs/_test_x_x.py checkpoints/BEVFusion.pth 2
 
 
 Note:
 with attack
+AttributeError: 'InstanceData' object has no attribute 'labels_3d'
 1. test_pipeline
+
     dict(
         type='LoadAnnotations3D',
         with_bbox_3d=True,
         with_label_3d=True,
         with_attr_label=False),
+
+AttributeError: 'InstanceData' object has no attribute 'bboxes_3d'
 2. val_dataloader dataset
     , filter_empty_gt=False, test_mode=False
 
 3. custom_hooks
-    custom_hooks = [
-        dict(
-            type='AttackHook',
-            attack_mode='whitebox', 
-            attack_cfg=dict(
-                type='AutoPGD'
-            )
+custom_hooks = [
+    dict(
+        type='AttackHook',
+        attack_mode='whitebox', 
+        attack_cfg=dict(
+            type='AutoPGD'
         )
-    ]
+    )
+]
 
 # freeze 要取消才能雙GPU運行
 # DDP中要使用model.module才能使用模型內部func

@@ -142,9 +142,10 @@ class BEVFusion(Base3DDetector):
         return loss, log_vars  # type: ignore
 
     def init_weights(self) -> None:
-        for m in self.children():
-            if hasattr(m, 'init_weights') and callable(m.init_weights):
-                m.init_weights()
+        if self.img_backbone is not None:
+            self.img_backbone.init_weights()
+        if self.defense is not None:
+            self.defense.init_weights()
 
     @property
     def with_bbox_head(self):

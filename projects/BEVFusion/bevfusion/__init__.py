@@ -2,7 +2,6 @@ from .bevfusion import BEVFusion
 from .bevfusion_necks import GeneralizedLSSFPN
 from .depth_lss import DepthLSSTransform, LSSTransform
 from .loading import BEVLoadMultiViewImageFromFiles
-from .defense import WNLM, SAMSNLM
 from .sparse_encoder import BEVFusionSparseEncoder
 from .transformer import TransformerDecoderLayer
 from .transforms_3d import (BEVFusionGlobalRotScaleTrans,
@@ -10,12 +9,14 @@ from .transforms_3d import (BEVFusionGlobalRotScaleTrans,
 from .transfusion_head import ConvFuser, TransFusionHead
 from .utils import (BBoxBEVL1Cost, HeuristicAssigner3D, HungarianAssigner3D,
                     IoU3DCost)
+from .defense import PNLM, AMHSA, GaussianBlur, MedianBlur, MeanBlur, BitDepth, Bilateral, NLM, JPEG, RandGaussian, SpatialSmooth
 
 __all__ = [
     'BEVFusion', 'TransFusionHead', 'ConvFuser', 'ImageAug3D', 'GridMask',
     'GeneralizedLSSFPN', 'HungarianAssigner3D', 'BBoxBEVL1Cost', 'IoU3DCost',
     'HeuristicAssigner3D', 'DepthLSSTransform', 'LSSTransform',
     'BEVLoadMultiViewImageFromFiles', 'BEVFusionSparseEncoder',
-    'TransformerDecoderLayer', 'BEVFusionRandomFlip3D',
-    'BEVFusionGlobalRotScaleTrans', 'WNLM', 'SAMSNLM'
+    'TransformerDecoderLayer', 'BEVFusionRandomFlip3D', 'BEVFusionGlobalRotScaleTrans', 
+    'PNLM', 'AMHSA', 'GaussianBlur', 'MedianBlur', 'MeanBlur', 'BitDepth', 'Bilateral', 
+    'NLM', 'JPEG', 'RandGaussian', 'SpatialSmooth'
 ]
